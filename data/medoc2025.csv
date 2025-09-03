@@ -1,0 +1,24 @@
+approx_km,wine_stop,food_stop,wine_rating,approx_uk_price_winesearcher,range_price,range_rating
+2,Chateau Lynch Bages,,Must stop,95,31 - 123,85 - 93
+4,Chateau Haut Bages Liberal,,Can stop,36,19 - 45,86 - 90
+5,Chateau Pichon Longueville Baron,🥐,Must stop,165,40 - 135,87 - 94
+8,Chateau Ducru-Beaucaillou,,Must stop,207,15 - 217,87 - 94
+12,Chateau Lagrange,,Nice to stop,45,Aug-49,87 - 91
+13,Chateau Belgrave,,Can stop,30,16 - 32,88 - 89
+15,Chateau Larose Trintaudon,,Can stop,26,Nov-29,84 - 89
+20,Chateau Grand Puy Lacoste,,Must stop,64,25 - 68,88 - 92
+22,Chateau d'Armailhac,,Nice to stop,45,40 - 55,91 - 91
+24,Chateau Lafite Rothschild,,Must stop,500,267 - 12800,90 - 95
+25,Chateau Cos Labory,,Can skip,28,27 - 32,88 - 89
+26,Chateau Haut Marbuzet,,Nice to stop,36,32 - 38,89 - 89
+27,Chateau Le Crock,,Can stop,38,20 - 30,87 - 89
+28,Chateau Le Haye,,Can skip,34,Nov-65,85 - 89
+29,Chateau Saint Estephe,,Can skip,19,19 - 19,88 - 88
+30,Chateau Marquis de Saint Estephe,,Can stop,29,Nov-49,80 - 89
+31,Chateau Laffitte Carcasset,,Can skip,20,Sep-17,87 - 89
+33,Chateau Phelan Segur,,Nice to stop,35,20 - 41,86 - 91
+34,Chateau Meyney,🥩:,Nice to stop,25,20 - 49,87 - 91
+35,Chateau Montrose,,Must stop,86,23 - 12800,89 - 94
+36,White wine (unknown),🦪,Nice to stop,10,10 - 10,84 - 84
+38,Red wine (unknown),🧀,Nice to stop,10,10 - 10,84 - 84
+40,Chateau Pedesclaux,,Nice to stop,34,20 - 41,88 - 92
