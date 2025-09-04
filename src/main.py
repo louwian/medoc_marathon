@@ -2,14 +2,15 @@ import streamlit as st
 from streamlit_folium import st_folium
 
 # Import from services
-from services import (
+from services.data_processing import (
     load_data, 
-    interpolate_stop_positions,
-    create_map
+    interpolate_stop_positions
 )
 
+from services.map_service import create_map
+
 # Import from UI
-from ui import (
+from ui.ui_components import (
     initialize_session_state,
     create_planning_section,
     create_optimization_section,

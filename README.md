@@ -1,5 +1,7 @@
 # 🍷 Medoc Marathon Route Planner
 
+**Version 0.1.0** 
+
 A comprehensive route planning application for the famous **Médoc Marathon** - the world's longest wine tasting event! This interactive Streamlit application helps you plan your wine stops, optimize your route, and ensure you finish within your target time while enjoying the best châteaux along the way.
 
 ## 🏃‍♂️ About the Medoc Marathon
@@ -118,32 +120,50 @@ streamlit run src/main.py
 ```
 medoc_marathon/
 ├── src/
+│   ├── __init__.py             # Package initialization and version info
 │   ├── main.py                 # Main Streamlit application
 │   ├── services/
+│   │   ├── __init__.py         # Services package exports
 │   │   ├── data_processing.py  # Data loading and processing
 │   │   ├── kml_processor.py    # KML/KMZ file processing
 │   │   ├── map_service.py      # Map creation with Folium
 │   │   └── optimization.py     # Route optimization algorithms
 │   ├── ui/
+│   │   ├── __init__.py         # UI components package exports
 │   │   └── ui_components.py    # Streamlit UI components
 │   └── utils/
+│       ├── __init__.py         # Utilities package exports
 │       └── helpers.py          # Utility functions
 ├── data/
 │   ├── medoc2025.csv              # Wine stop data
 │   ├── medoc_marathon_complete_route.csv  # Route coordinates
 │   └── Medoc Marathon 2025.kmz    # KMZ file from Google My Maps
-├── pyproject.toml              # Project dependencies
+├── pyproject.toml              # Project dependencies and metadata
+├── uv.lock                     # UV dependency lock file
 └── README.md                   # This file
 ```
 
 ## 🔧 Dependencies
 
-- **streamlit**: Web application framework
-- **folium & streamlit-folium**: Interactive maps
-- **pandas**: Data manipulation and analysis
-- **scipy**: Scientific computing (interpolation)
-- **geopy**: Geographic calculations
-- **matplotlib & plotly**: Data visualization
+The project uses modern Python packaging with `pyproject.toml` and UV for dependency management:
+
+- **streamlit** (≥1.28.0): Web application framework
+- **folium** (≥0.14.0) & **streamlit-folium** (≥0.15.0): Interactive maps
+- **pandas** (≥2.3.2): Data manipulation and analysis
+- **scipy** (≥1.15.3): Scientific computing (interpolation)
+- **geopy** (≥2.4.1): Geographic calculations
+- **matplotlib** (≥3.10.5) & **plotly** (≥5.17.0): Data visualization
+
+## 🏗️ Architecture
+
+The application follows a modular architecture with clear separation of concerns:
+
+- **`src/`**: Main package with version management and clean imports
+- **`services/`**: Core business logic (data processing, optimization, mapping)
+- **`ui/`**: User interface components and Streamlit integration
+- **`utils/`**: Shared utility functions and helpers
+
+Each module is properly packaged with `__init__.py` files for clean imports and better maintainability. The package includes built-in version management with semantic versioning.
 
 ## 📊 Data Sources
 
@@ -167,12 +187,13 @@ The application uses three main data files:
 
 ## 🎯 Optimization Algorithm
 
-The route optimizer uses a multi-phase approach:
+The route optimizer uses an enhanced multi-phase approach with improved constraint validation:
 
-1. **Constraint validation**: Ensures your goals are mathematically possible
-2. **Gap filling**: Adds stops to prevent long distances without wine
-3. **Value optimization**: Selects highest-rated/most expensive stops when possible
-4. **Time management**: Balances stop quantity with time constraints
+1. **Enhanced constraint validation**: Rigorous mathematical validation of route feasibility with detailed constraint checking
+2. **Smart gap filling**: Intelligently adds stops to prevent long distances without wine while respecting time constraints
+3. **Value optimization**: Prioritizes highest-rated and most expensive stops when possible
+4. **Advanced time management**: Sophisticated balancing of stop quantity with time constraints
+5. **Constraint violation detection**: Detailed analysis and reporting of any constraint violations with actionable recommendations
 
 ---
 

@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import time
-from utils import mark_route_as_not_optimized
+from utils.helpers import mark_route_as_not_optimized
 
 
 def initialize_session_state(stops_df):
@@ -173,7 +173,7 @@ def create_planning_section():
 
 def create_optimization_section(route_df, stops_with_coords):
     """Create the route optimization section"""
-    from services import optimize_route
+    from services.optimization import optimize_route
     
     st.subheader("🚀 Route Optimization")
     
@@ -236,7 +236,7 @@ def create_optimization_section(route_df, stops_with_coords):
 
 def create_validation_section(route_df, stops_with_coords):
     """Create validation section showing constraint analysis"""
-    from services import validate_route_constraints, calculate_time_breakdown
+    from services.optimization import validate_route_constraints, calculate_time_breakdown
     
     st.subheader("🔍 Route Validation")
     
