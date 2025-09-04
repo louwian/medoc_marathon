@@ -1,6 +1,6 @@
 # 🍷 Medoc Marathon Route Planner
 
-**Version 0.1.0** 
+**Version 1.2** 
 
 A comprehensive route planning application for the famous **Médoc Marathon** - the world's longest wine tasting event! This interactive Streamlit application helps you plan your wine stops, optimize your route, and ensure you finish within your target time while enjoying the best châteaux along the way.
 
