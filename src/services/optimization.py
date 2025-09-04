@@ -1,7 +1,7 @@
 import math
 import streamlit as st
 
-def validate_route_constraints(route_df, session_state, stops_with_coords=None):
+def validate_route_constraints(route_df, session_state, stops_with_coords=None, selected_stops_override=None):
     """
     Validate if the user's planning constraints are realistic.
     
@@ -9,6 +9,7 @@ def validate_route_constraints(route_df, session_state, stops_with_coords=None):
         route_df: DataFrame with route data
         session_state: Streamlit session state with planning parameters
         stops_with_coords: DataFrame with stop coordinates (optional, for selected stops validation)
+        selected_stops_override: List of stops to validate instead of session_state.selected_stops
     
     Returns:
         dict: Validation results with success status and messages
@@ -80,10 +81,15 @@ def validate_route_constraints(route_df, session_state, stops_with_coords=None):
         )
     
     # Check 3: Validate selected stops don't exceed max gap
-    if stops_with_coords is not None and hasattr(session_state, 'selected_stops') and session_state.selected_stops:
+    # Use override if provided, otherwise use session_state.selected_stops
+    selected_stops_to_validate = selected_stops_override if selected_stops_override is not None else (
+        session_state.selected_stops if hasattr(session_state, 'selected_stops') else []
+    )
+    
+    if stops_with_coords is not None and selected_stops_to_validate:
         # Get selected stops data and sort by distance
         selected_stops_data = stops_with_coords[
-            stops_with_coords['wine_stop'].isin(session_state.selected_stops)
+            stops_with_coords['wine_stop'].isin(selected_stops_to_validate)
         ].sort_values('approx_km').reset_index(drop=True)
         
         if len(selected_stops_data) > 0:
@@ -138,6 +144,42 @@ def validate_route_constraints(route_df, session_state, stops_with_coords=None):
                     f"and '{max_current_gap[1]}' is close to your {max_gap}km limit."
                 )
     
+    # Check 4: Total number of stops doesn't exceed max stops
+    num_selected_stops = len(selected_stops_to_validate)
+    validation_results['info']['num_selected_stops'] = num_selected_stops
+    
+    if num_selected_stops > max_stops:
+        validation_results['errors'].append(
+            f"You have selected {num_selected_stops} stops, which exceeds your maximum of {max_stops} stops. "
+            f"Remove {num_selected_stops - max_stops} stops or increase your maximum stops limit."
+        )
+        validation_results['is_valid'] = False
+    elif num_selected_stops > max_stops * 0.9:  # Within 90% of limit
+        validation_results['warnings'].append(
+            f"You have {num_selected_stops} stops selected, close to your maximum of {max_stops} stops."
+        )
+    
+    # Check 5: Total time doesn't exceed marathon goal time
+    if selected_stops_to_validate:  # Only check if we have stops selected
+        total_time_with_selected = running_time + (num_selected_stops * time_per_stop)
+        validation_results['info']['total_time_with_selected_stops'] = total_time_with_selected
+        
+        if total_time_with_selected > marathon_time_minutes:
+            time_over = total_time_with_selected - marathon_time_minutes
+            validation_results['errors'].append(
+                f"With {num_selected_stops} stops, you'd need {total_time_with_selected:.0f} minutes "
+                f"({total_time_with_selected//60:.0f}h {total_time_with_selected%60:.0f}m), "
+                f"which is {time_over:.0f} minutes over your {marathon_time_minutes:.0f} minute goal. "
+                f"Consider: removing stops, faster pace, or longer marathon time."
+            )
+            validation_results['is_valid'] = False
+        elif total_time_with_selected > marathon_time_minutes * 0.95:  # Within 95% of goal
+            buffer = marathon_time_minutes - total_time_with_selected
+            validation_results['warnings'].append(
+                f"Very tight schedule: only {buffer:.0f} minutes buffer with {num_selected_stops} stops. "
+                f"Consider reducing stops for safety margin."
+            )
+    
     return validation_results
 
 
@@ -168,7 +210,8 @@ def calculate_time_breakdown(route_df, session_state, num_stops):
 
 def optimize_route(route_df, session_state, stops_with_coords):
     """
-    Optimize the route selection based on constraints.
+    Holistic optimization using validation-driven approach.
+    After each change, all constraints are re-validated.
     
     Returns:
         dict: Optimization results with new selection and status
@@ -177,224 +220,267 @@ def optimize_route(route_df, session_state, stops_with_coords):
     
     # Get current selected stops
     selected_stops = list(session_state.selected_stops) if hasattr(session_state, 'selected_stops') else []
-    max_stops = session_state.max_stops
-    max_gap = session_state.max_distance_between_stops
-    
     optimization_log = []
-    optimization_log.append(f"Starting optimization with {len(selected_stops)} selected stops")
+    optimization_log.append(f"Starting holistic optimization with {len(selected_stops)} selected stops")
     
-    # Step 1: Remove lowest price stops if over max_stops limit
-    if len(selected_stops) > max_stops:
-        optimization_log.append(f"Reducing from {len(selected_stops)} to {max_stops} stops")
-        
-        # Get selected stops data with prices
-        selected_stops_data = stops_with_coords[
-            stops_with_coords['wine_stop'].isin(selected_stops)
-        ].copy()
-        
-        # Sort by price (lowest first) and remove lowest priced ones
-        selected_stops_data = selected_stops_data.sort_values('approx_uk_price_winesearcher')
-        stops_to_remove = len(selected_stops) - max_stops
-        
-        for i in range(stops_to_remove):
-            stop_to_remove = selected_stops_data.iloc[i]
-            selected_stops.remove(stop_to_remove['wine_stop'])
-            optimization_log.append(f"Removed {stop_to_remove['wine_stop']} (£{stop_to_remove['approx_uk_price_winesearcher']})")
-    
-    # Step 2: Find and fill gaps that exceed max_gap
-    max_iterations = 50  # Prevent infinite loops
+    max_iterations = 100  # Prevent infinite loops
     iteration = 0
     
     while iteration < max_iterations:
         iteration += 1
+        optimization_log.append(f"\n--- Iteration {iteration} ---")
         
-        # Get current selected stops data and sort by distance
-        current_selected = stops_with_coords[
-            stops_with_coords['wine_stop'].isin(selected_stops)
-        ].sort_values('approx_km').reset_index(drop=True)
+        # Validate current state
+        validation = validate_route_constraints(route_df, session_state, stops_with_coords, selected_stops)
+        optimization_log.append(f"Current selection: {len(selected_stops)} stops")
+        optimization_log.append(f"Validation: {'✔️ VALID' if validation['is_valid'] else '❌ INVALID'}")
         
-        if len(current_selected) == 0:
-            break
+        # Log any warnings
+        for warning in validation['warnings']:
+            optimization_log.append(f"⚠️  {warning}")
+        
+        # If valid, try to optimize further (add valuable stops if possible)
+        if validation['is_valid']:
+            optimization_log.append("Current solution is valid - attempting optimization...")
             
-        # Find gaps
-        gaps = []
-        total_distance = route_df['cumulative_distance_km'].max()
-        
-        # Gap from start to first stop
-        if len(current_selected) > 0:
-            first_gap = current_selected.iloc[0]['approx_km']
-            if first_gap > max_gap:
-                gaps.append({
-                    'start_km': 0,
-                    'end_km': current_selected.iloc[0]['approx_km'],
-                    'gap': first_gap,
-                    'before_stop': 'Start',
-                    'after_stop': current_selected.iloc[0]['wine_stop']
-                })
-        
-        # Gaps between consecutive stops
-        for i in range(len(current_selected) - 1):
-            current_stop = current_selected.iloc[i]
-            next_stop = current_selected.iloc[i + 1]
-            gap = next_stop['approx_km'] - current_stop['approx_km']
+            # Try to add a valuable stop if we have capacity
+            improvement_made = try_add_valuable_stop(
+                selected_stops, stops_with_coords, session_state, route_df, optimization_log
+            )
             
-            if gap > max_gap:
-                gaps.append({
-                    'start_km': current_stop['approx_km'],
-                    'end_km': next_stop['approx_km'],
-                    'gap': gap,
-                    'before_stop': current_stop['wine_stop'],
-                    'after_stop': next_stop['wine_stop']
-                })
+            if not improvement_made:
+                optimization_log.append("No further improvements possible - optimization complete")
+                break
         
-        # Gap from last stop to finish
-        if len(current_selected) > 0:
-            last_stop = current_selected.iloc[-1]
-            final_gap = total_distance - last_stop['approx_km']
-            if final_gap > max_gap:
-                gaps.append({
-                    'start_km': last_stop['approx_km'],
-                    'end_km': total_distance,
-                    'gap': final_gap,
-                    'before_stop': last_stop['wine_stop'],
-                    'after_stop': 'Finish'
-                })
-        
-        # If no gaps found, we're done
-        if not gaps:
-            optimization_log.append("No gaps exceeding limit found - optimization complete")
-            break
-        
-        # Find the largest gap
-        largest_gap = max(gaps, key=lambda x: x['gap'])
-        optimization_log.append(f"Found {largest_gap['gap']:.1f}km gap between {largest_gap['before_stop']} and {largest_gap['after_stop']}")
-        
-        # Find available stops in this gap range
-        available_stops = stops_with_coords[
-            (stops_with_coords['approx_km'] > largest_gap['start_km']) &
-            (stops_with_coords['approx_km'] < largest_gap['end_km']) &
-            (~stops_with_coords['wine_stop'].isin(selected_stops))
-        ]
-        
-        if len(available_stops) == 0:
-            optimization_log.append(f"No available stops found in gap - cannot optimize further")
-            break
-        
-        # Select the highest priced stop in the gap
-        best_stop = available_stops.loc[available_stops['approx_uk_price_winesearcher'].idxmax()]
-        selected_stops.append(best_stop['wine_stop'])
-        optimization_log.append(f"Added {best_stop['wine_stop']} (£{best_stop['approx_uk_price_winesearcher']}) at {best_stop['approx_km']:.1f}km")
-        
-        # Check if we've hit the max stops limit
-        if len(selected_stops) >= max_stops:
-            optimization_log.append(f"Reached maximum stops limit ({max_stops})")
-            break
+        # If invalid, address the errors
+        else:
+            optimization_log.append("Addressing constraint violations...")
+            for error in validation['errors']:
+                optimization_log.append(f"❌ {error}")
+            
+            # Address the most critical error first
+            error_addressed = address_constraint_violation(
+                selected_stops, stops_with_coords, session_state, route_df, 
+                validation, optimization_log
+            )
+            
+            if not error_addressed:
+                optimization_log.append("❌ Cannot address constraint violations - optimization failed")
+                break
     
     if iteration >= max_iterations:
-        optimization_log.append("Warning: Maximum iterations reached")
-    
-    # Step 3: Add valuable stops if time capacity allows
-    optimization_log.append("Adding valuable stops with time capacity")
-    
-    # Check if we have time buffer
-    total_distance = route_df['cumulative_distance_km'].max()
-    pace_per_km = (session_state.running_pace_minutes + 
-                   session_state.running_pace_seconds / 60)
-    marathon_time_minutes = (session_state.total_marathon_hours * 60 + 
-                           session_state.total_marathon_minutes)
-    
-    current_running_time = total_distance * pace_per_km
-    current_stop_time = len(selected_stops) * session_state.time_per_stop
-    current_total_time = current_running_time + current_stop_time
-    time_buffer = marathon_time_minutes - current_total_time
-    
-    optimization_log.append(f"Current total time: {current_total_time:.0f} min, Buffer: {time_buffer:.0f} min")
-    
-    if time_buffer > session_state.time_per_stop and len(selected_stops) < max_stops:
-        optimization_log.append(f"Time buffer allows for more stops, trying to add valuable ones...")
-        
-        # Get all remaining stops sorted by price (highest first)
-        remaining_stops = stops_with_coords[
-            ~stops_with_coords['wine_stop'].isin(selected_stops)
-        ].sort_values('approx_uk_price_winesearcher', ascending=False)
-        
-        phase3_iterations = 0
-        for _, candidate_stop in remaining_stops.iterrows():
-            phase3_iterations += 1
-            
-            # Check if we still have time capacity
-            potential_stop_time = (len(selected_stops) + 1) * session_state.time_per_stop
-            potential_total_time = current_running_time + potential_stop_time
-            
-            if potential_total_time > marathon_time_minutes:
-                optimization_log.append(f"No time capacity for more stops (would exceed goal time by {potential_total_time - marathon_time_minutes:.0f} min)")
-                break
-            
-            if len(selected_stops) >= max_stops:
-                optimization_log.append(f"Reached maximum stops limit ({max_stops})")
-                break
-            
-            # Temporarily add this stop
-            test_stops = selected_stops + [candidate_stop['wine_stop']]
-            
-            # Check for gap breaches with this stop added
-            test_selected_data = stops_with_coords[
-                stops_with_coords['wine_stop'].isin(test_stops)
-            ].sort_values('approx_km').reset_index(drop=True)
-            
-            # Calculate gaps with the new stop
-            gaps = []
-            
-            # Gap from start to first stop
-            if len(test_selected_data) > 0:
-                first_gap = test_selected_data.iloc[0]['approx_km']
-                if first_gap > max_gap:
-                    gaps.append(first_gap)
-            
-            # Gaps between consecutive stops
-            for i in range(len(test_selected_data) - 1):
-                current_stop = test_selected_data.iloc[i]
-                next_stop = test_selected_data.iloc[i + 1]
-                gap = next_stop['approx_km'] - current_stop['approx_km']
-                if gap > max_gap:
-                    gaps.append(gap)
-            
-            # Gap from last stop to finish
-            if len(test_selected_data) > 0:
-                last_stop = test_selected_data.iloc[-1]
-                final_gap = total_distance - last_stop['approx_km']
-                if final_gap > max_gap:
-                    gaps.append(final_gap)
-            
-            # If no gaps exceed the limit, add this stop
-            if not gaps:
-                selected_stops.append(candidate_stop['wine_stop'])
-                optimization_log.append(f"Added valuable stop: {candidate_stop['wine_stop']} (£{candidate_stop['approx_uk_price_winesearcher']}) at {candidate_stop['approx_km']:.1f}km")
-                
-                # Update time calculations for next iteration
-                current_stop_time = len(selected_stops) * session_state.time_per_stop
-                current_total_time = current_running_time + current_stop_time
-                time_buffer = marathon_time_minutes - current_total_time
-                optimization_log.append(f"  New buffer: {time_buffer:.0f} min with {len(selected_stops)} stops")
-                
-            else:
-                max_breach = max(gaps)
-                optimization_log.append(f"Cannot add {candidate_stop['wine_stop']} - would create {max_breach:.1f}km gap (limit: {max_gap}km)")
-                optimization_log.append("🎯 No more stops can be added without breaching gap constraints")
-                break
-        
-        optimization_log.append(f"Phase 3 complete after checking {phase3_iterations} candidate stops")
-    else:
-        if time_buffer <= session_state.time_per_stop:
-            optimization_log.append(f"Insufficient time buffer ({time_buffer:.0f} min) for additional stops")
-        if len(selected_stops) >= max_stops:
-            optimization_log.append(f"Already at maximum stops limit ({max_stops})")
-    
-    final_iterations = iteration + phase3_iterations if 'phase3_iterations' in locals() else iteration
+        optimization_log.append("⚠️  Maximum iterations reached")
     
     return {
         'optimized_stops': selected_stops,
         'optimization_log': optimization_log,
-        'iterations': final_iterations,
-        'success': True
+        'iterations': iteration,
+        'success': iteration < max_iterations
     }
+
+
+def address_constraint_violation(selected_stops, stops_with_coords, session_state, route_df, validation, optimization_log):
+    """
+    Address the most critical constraint violation based on validation results.
+    Returns True if a change was made, False if no solution found.
+    """
+    
+    # Priority 1: Too many stops (detected by Check 4 validation)
+    for error in validation['errors']:
+        if "exceeds your maximum of" in error and "stops" in error:
+            return handle_too_many_stops(selected_stops, stops_with_coords, session_state, optimization_log)
+    
+    # Priority 2: Time constraint violation (detected by Check 5 validation)
+    for error in validation['errors']:
+        if "minutes over your" in error and "minute goal" in error:
+            return handle_time_violation(selected_stops, stops_with_coords, session_state, optimization_log)
+    
+    # Priority 3: Gap constraint violations
+    for error in validation['errors']:
+        if "exceeds your" in error and "km limit" in error:
+            return handle_gap_violation(selected_stops, stops_with_coords, session_state, route_df, optimization_log)
+        if "you need at least" in error and "stops" in error:
+            return handle_insufficient_stops_for_gaps(selected_stops, stops_with_coords, session_state, route_df, optimization_log)
+    
+    return False
+
+
+def handle_too_many_stops(selected_stops, stops_with_coords, session_state, optimization_log):
+    """Remove lowest value stops to meet max_stops constraint."""
+    if len(selected_stops) <= session_state.max_stops:
+        return False
+    
+    optimization_log.append(f"Removing {len(selected_stops) - session_state.max_stops} stops to meet max_stops constraint")
+    
+    # Get selected stops data with prices
+    selected_stops_data = stops_with_coords[
+        stops_with_coords['wine_stop'].isin(selected_stops)
+    ].copy()
+    
+    # Sort by price (lowest first) and remove lowest priced ones
+    selected_stops_data = selected_stops_data.sort_values('approx_uk_price_winesearcher')
+    stops_to_remove = len(selected_stops) - session_state.max_stops
+    
+    for i in range(stops_to_remove):
+        stop_to_remove = selected_stops_data.iloc[i]
+        selected_stops.remove(stop_to_remove['wine_stop'])
+        optimization_log.append(f"Removed {stop_to_remove['wine_stop']} (£{stop_to_remove['approx_uk_price_winesearcher']})")
+    
+    return True
+
+
+def handle_time_violation(selected_stops, stops_with_coords, session_state, optimization_log):
+    """Remove lowest value stops to meet time constraints."""
+    if len(selected_stops) == 0:
+        return False
+    
+    optimization_log.append("Removing lowest value stop to address time constraint")
+    
+    # Get selected stops data with prices
+    selected_stops_data = stops_with_coords[
+        stops_with_coords['wine_stop'].isin(selected_stops)
+    ].copy()
+    
+    # Remove the lowest priced stop
+    lowest_value_stop = selected_stops_data.loc[selected_stops_data['approx_uk_price_winesearcher'].idxmin()]
+    selected_stops.remove(lowest_value_stop['wine_stop'])
+    optimization_log.append(f"Removed {lowest_value_stop['wine_stop']} (£{lowest_value_stop['approx_uk_price_winesearcher']})")
+    
+    return True
+
+
+def handle_gap_violation(selected_stops, stops_with_coords, session_state, route_df, optimization_log):
+    """Add stops to fill gaps that exceed max_distance_between_stops."""
+    total_distance = route_df['cumulative_distance_km'].max()
+    max_gap = session_state.max_distance_between_stops
+    
+    # Get current selected stops data sorted by distance
+    current_selected = stops_with_coords[
+        stops_with_coords['wine_stop'].isin(selected_stops)
+    ].sort_values('approx_km').reset_index(drop=True)
+    
+    # Find the largest gap that exceeds the limit
+    largest_gap = find_largest_gap_violation(current_selected, total_distance, max_gap)
+    
+    if not largest_gap:
+        return False
+    
+    optimization_log.append(f"Filling {largest_gap['gap']:.1f}km gap between {largest_gap['before_stop']} and {largest_gap['after_stop']}")
+    
+    # Find available stops in this gap range
+    available_stops = stops_with_coords[
+        (stops_with_coords['approx_km'] > largest_gap['start_km']) &
+        (stops_with_coords['approx_km'] < largest_gap['end_km']) &
+        (~stops_with_coords['wine_stop'].isin(selected_stops))
+    ]
+    
+    if len(available_stops) == 0:
+        optimization_log.append("No available stops found in gap")
+        return False
+    
+    # Select the highest priced stop in the gap (best value)
+    best_stop = available_stops.loc[available_stops['approx_uk_price_winesearcher'].idxmax()]
+    selected_stops.append(best_stop['wine_stop'])
+    optimization_log.append(f"Added {best_stop['wine_stop']} (£{best_stop['approx_uk_price_winesearcher']}) at {best_stop['approx_km']:.1f}km")
+    
+    return True
+
+
+def handle_insufficient_stops_for_gaps(selected_stops, stops_with_coords, session_state, route_df, optimization_log):
+    """Add stops when minimum required for gap constraint isn't met."""
+    optimization_log.append("Adding stops to meet minimum required for gap constraints")
+    
+    # Find the best available stop overall
+    available_stops = stops_with_coords[
+        ~stops_with_coords['wine_stop'].isin(selected_stops)
+    ]
+    
+    if len(available_stops) == 0:
+        optimization_log.append("No available stops to add")
+        return False
+    
+    # Add the highest value stop
+    best_stop = available_stops.loc[available_stops['approx_uk_price_winesearcher'].idxmax()]
+    selected_stops.append(best_stop['wine_stop'])
+    optimization_log.append(f"Added {best_stop['wine_stop']} (£{best_stop['approx_uk_price_winesearcher']}) at {best_stop['approx_km']:.1f}km")
+    
+    return True
+
+
+def try_add_valuable_stop(selected_stops, stops_with_coords, session_state, route_df, optimization_log):
+    """
+    Try to add a valuable stop if we have capacity (time and stop count).
+    Uses validate_route_constraints to check all constraints for each potential addition.
+    Returns True if a stop was added, False otherwise.
+    """
+    # Get remaining stops sorted by value (price)
+    available_stops = stops_with_coords[
+        ~stops_with_coords['wine_stop'].isin(selected_stops)
+    ].sort_values('approx_uk_price_winesearcher', ascending=False)
+    
+    # Try to add the most valuable stop that doesn't create constraint violations
+    for _, candidate_stop in available_stops.iterrows():
+        # Create test selection with this stop
+        test_stops = selected_stops + [candidate_stop['wine_stop']]
+        
+        # Validate this potential addition
+        test_validation = validate_route_constraints(route_df, session_state, stops_with_coords, test_stops)
+        
+        if test_validation['is_valid']:
+            selected_stops.append(candidate_stop['wine_stop'])
+            optimization_log.append(f"Added valuable stop: {candidate_stop['wine_stop']} (£{candidate_stop['approx_uk_price_winesearcher']}) at {candidate_stop['approx_km']:.1f}km")
+            return True
+        else:
+            optimization_log.append(f"Cannot add {candidate_stop['wine_stop']}: would violate constraints")
+    
+    optimization_log.append("No valuable stops can be added without violating constraints")
+    return False
+
+
+def find_largest_gap_violation(current_selected, total_distance, max_gap):
+    """Find the largest gap that exceeds max_gap."""
+    gaps = []
+    
+    if len(current_selected) == 0:
+        return None
+    
+    # Gap from start to first stop
+    first_gap = current_selected.iloc[0]['approx_km']
+    if first_gap > max_gap:
+        gaps.append({
+            'start_km': 0,
+            'end_km': current_selected.iloc[0]['approx_km'],
+            'gap': first_gap,
+            'before_stop': 'Start',
+            'after_stop': current_selected.iloc[0]['wine_stop']
+        })
+    
+    # Gaps between consecutive stops
+    for i in range(len(current_selected) - 1):
+        current_stop = current_selected.iloc[i]
+        next_stop = current_selected.iloc[i + 1]
+        gap = next_stop['approx_km'] - current_stop['approx_km']
+        
+        if gap > max_gap:
+            gaps.append({
+                'start_km': current_stop['approx_km'],
+                'end_km': next_stop['approx_km'],
+                'gap': gap,
+                'before_stop': current_stop['wine_stop'],
+                'after_stop': next_stop['wine_stop']
+            })
+    
+    # Gap from last stop to finish
+    last_stop = current_selected.iloc[-1]
+    final_gap = total_distance - last_stop['approx_km']
+    if final_gap > max_gap:
+        gaps.append({
+            'start_km': last_stop['approx_km'],
+            'end_km': total_distance,
+            'gap': final_gap,
+            'before_stop': last_stop['wine_stop'],
+            'after_stop': 'Finish'
+        })
+    
+    # Return the largest gap
+    return max(gaps, key=lambda x: x['gap']) if gaps else None

@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import time
-from utils.helpers import mark_route_as_not_optimized
+from utils import mark_route_as_not_optimized
 
 
 def initialize_session_state(stops_df):
@@ -173,7 +173,7 @@ def create_planning_section():
 
 def create_optimization_section(route_df, stops_with_coords):
     """Create the route optimization section"""
-    from services.optimization import optimize_route
+    from services import optimize_route
     
     st.subheader("🚀 Route Optimization")
     
@@ -223,7 +223,7 @@ def create_optimization_section(route_df, stops_with_coords):
                         st.write(f"**{i+1}.** ✅ {log_entry}")
                     elif "Found" in log_entry and "gap" in log_entry:
                         st.write(f"**{i+1}.** 🔍 {log_entry}")
-                    elif "complete" in log_entry or "limit" in log_entry:
+                    elif "optimization complete" in log_entry:
                         st.write(f"**{i+1}.** 🎯 {log_entry}")
                     else:
                         st.write(f"**{i+1}.** {log_entry}")
@@ -236,7 +236,7 @@ def create_optimization_section(route_df, stops_with_coords):
 
 def create_validation_section(route_df, stops_with_coords):
     """Create validation section showing constraint analysis"""
-    from services.optimization import validate_route_constraints, calculate_time_breakdown
+    from services import validate_route_constraints, calculate_time_breakdown
     
     st.subheader("🔍 Route Validation")
     
@@ -310,14 +310,15 @@ def create_validation_section(route_df, stops_with_coords):
         st.metric(
             "Time Buffer", 
             f"{buffer:.0f} min" if buffer > 0 else f"{abs(buffer):.0f} min over",
-            delta="Good" if buffer > 30 else ("Tight" if buffer > 0 else "Over Goal")
+            delta="Good" if buffer > 30 else ("Tight" if buffer > 0 else "-Over Goal")
         )
     
     st.markdown("---")
 
 
-def create_sidebar(stops_df):
+def create_sidebar(stops_df, app_version):
     """Create sidebar with grouped checkboxes"""
+    st.sidebar.write(app_version)
     st.sidebar.title("🍷 Wine Stops Selection")
     st.sidebar.markdown("Select the stops you want to visit during the marathon:")
     

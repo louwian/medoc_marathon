@@ -2,11 +2,14 @@ import streamlit as st
 from streamlit_folium import st_folium
 
 # Import from services
-from services.data_processing import load_data, interpolate_stop_positions
-from services.map_service import create_map
+from services import (
+    load_data, 
+    interpolate_stop_positions,
+    create_map
+)
 
 # Import from UI
-from ui.ui_components import (
+from ui import (
     initialize_session_state,
     create_planning_section,
     create_optimization_section,
@@ -14,6 +17,8 @@ from ui.ui_components import (
     create_sidebar, 
     create_planned_route_panel
 )
+
+APP_VERSION = "V1.1"
 
 # Set page config
 st.set_page_config(
@@ -40,7 +45,7 @@ def main():
         initialize_session_state(stops_df)
         
         # Create sidebar
-        create_sidebar(stops_df)
+        create_sidebar(stops_df, APP_VERSION)
         
         # Create planning section
         create_planning_section()
