@@ -1,0 +1,15 @@
+/* Inputs: */
+/* :encoded_string */
+
+.custom-logo-container {{
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+    padding: 10px;
+}}
+
+.custom-logo-container img {{
+    max-height: 80px;
+    max-width: 200px;
+    object-fit: contain;
+}}

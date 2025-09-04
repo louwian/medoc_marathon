@@ -19,7 +19,7 @@ from ui.ui_components import (
     create_planned_route_panel
 )
 
-APP_VERSION = "V1.1"
+APP_VERSION = "V1.2"
 
 # Set page config
 st.set_page_config(

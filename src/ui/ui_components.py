@@ -1,7 +1,9 @@
+import base64
 import streamlit as st
 import pandas as pd
+from pathlib import Path
 import time
-from utils.helpers import mark_route_as_not_optimized
+from utils.helpers import mark_route_as_not_optimized, load_css
 
 
 def initialize_session_state(stops_df):
@@ -126,7 +128,7 @@ def create_planning_section():
         with col1:
             # Min stops
             min_stops = st.number_input(
-                "Min stops",
+                "Min glasses",
                 min_value=1,
                 max_value=st.session_state.max_stops,
                 value=6,
@@ -137,7 +139,7 @@ def create_planning_section():
         with col2:
             # Max stops
             max_stops = st.number_input(
-                "Max stops",
+                "Max glasses",
                 min_value=st.session_state.min_stops,
                 max_value=23,
                 value=15,
@@ -318,8 +320,26 @@ def create_validation_section(route_df, stops_with_coords):
 
 def create_sidebar(stops_df, app_version):
     """Create sidebar with grouped checkboxes"""
+
+    # Load and display logo
+    current_file = Path(__file__)
+    logo_path = current_file.parent.parent / "images" / "_WL_logo.png"
+    with logo_path.open("rb") as image_file:
+        encoded_string = base64.b64encode(image_file.read()).decode()
+
+    # Load CSS styles
+    style = load_css(current_file.parent.parent / "css" / "logo.css")
+    st.markdown(style, unsafe_allow_html=True)
+    
+    # Display logo using HTML
+    logo_html = f"""
+    <div class="custom-logo-container">
+        <img src="data:image/png;base64,{encoded_string}" alt="Wine & Logistics Logo">
+    </div>
+    """
+    st.sidebar.markdown(logo_html, unsafe_allow_html=True)
+    
     st.sidebar.write(app_version)
-    st.sidebar.title("🍷 Wine Stops Selection")
     st.sidebar.markdown("Select the stops you want to visit during the marathon:")
     
     
@@ -472,8 +492,9 @@ def create_planned_route_panel(route_df, stops_df, stops_with_coords, selected_s
     with col2:
         st.metric("Total Time", f"{int(cumulative_time//60)}h {int(cumulative_time%60)}m")
     with col3:
-        total_wine_cost = selected_stops_data['approx_uk_price_winesearcher'].sum()
-        st.metric("Wine Budget", f"£{total_wine_cost}")
+        # Get the average cost of the wine consumed
+        total_wine_cost = round(selected_stops_data['approx_uk_price_winesearcher'].sum()/len(selected_stops), 2)
+        st.metric("Estimated value of wine consumed", f"£{total_wine_cost}")
     
     # Display route timeline
     st.markdown("---")
