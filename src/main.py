@@ -1,5 +1,7 @@
 import streamlit as st
 from streamlit_folium import st_folium
+import base64
+from pathlib import Path
 
 # Import from services
 from services.data_processing import (
@@ -8,6 +10,7 @@ from services.data_processing import (
 )
 
 from services.map_service import create_map
+from utils.helpers import load_css
 
 # Import from UI
 from ui.ui_components import (
@@ -21,6 +24,31 @@ from ui.ui_components import (
 
 APP_VERSION = "V1.2"
 
+
+def create_main_header():
+    """Create main page header with title and logo"""
+    # Load logo
+    current_file = Path(__file__)
+    logo_path = current_file.parent / "images" / "_WL_logo.png"
+    with logo_path.open("rb") as image_file:
+        encoded_string = base64.b64encode(image_file.read()).decode()
+
+    # Load CSS styles
+    style = load_css(current_file.parent / "css" / "logo.css")
+    st.markdown(style, unsafe_allow_html=True)
+    
+    # Create header HTML
+    header_html = f"""
+    <div class="main-header">
+        <h1>🍷 Medoc Marathon Route Planner</h1>
+        <div class="main-header-logo">
+            <img src="data:image/png;base64,{encoded_string}" alt="Wine & Logistics Logo">
+        </div>
+    </div>
+    """
+    st.markdown(header_html, unsafe_allow_html=True)
+
+
 # Set page config
 st.set_page_config(
     page_title="Medoc Marathon Route Planner",
@@ -32,7 +60,7 @@ st.set_page_config(
 
 def main():
     """Main application"""
-    st.title("🍷 Medoc Marathon Route Planner")
+    create_main_header()
     st.markdown("Plan your wine stops for the famous Medoc Marathon! Select stops in the sidebar to see them on the map.")
     
     try:

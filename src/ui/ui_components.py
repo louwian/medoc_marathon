@@ -493,7 +493,7 @@ def create_planned_route_panel(route_df, stops_df, stops_with_coords, selected_s
         st.metric("Total Time", f"{int(cumulative_time//60)}h {int(cumulative_time%60)}m")
     with col3:
         # Get the average cost of the wine consumed
-        total_wine_cost = round(selected_stops_data['approx_uk_price_winesearcher'].sum()/len(selected_stops), 2)
+        total_wine_cost = round(selected_stops_data['approx_uk_price_winesearcher'].sum()/6, 2)
         st.metric("Estimated value of wine consumed", f"£{total_wine_cost}")
     
     # Display route timeline
