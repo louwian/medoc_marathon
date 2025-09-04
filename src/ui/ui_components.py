@@ -322,6 +322,7 @@ def create_sidebar(stops_df, app_version):
     st.sidebar.title("🍷 Wine Stops Selection")
     st.sidebar.markdown("Select the stops you want to visit during the marathon:")
     
+    
     # Group stops by wine_rating (stop type)
     stop_groups = stops_df.groupby('wine_rating')
     
